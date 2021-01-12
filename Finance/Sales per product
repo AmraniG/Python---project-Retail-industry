@@ -1,0 +1,72 @@
+import pandas as pd
+from datetime import datetime
+from datetime import date
+import Variables as variables
+import re
+from pandas import DataFrame
+from functools import reduce
+
+#Read csv and create dataframes
+
+online_orders = pd.read_csv(variables.new_online_orders_merged_FX)
+
+#Fill the product1 Df with - in case of no values 
+online_orders['product1'] = online_orders.product1.fillna(value = '-')
+
+#Drop the rows where order status is canceled or failed
+new_online_orders = online_orders[online_orders["status"].str.contains('canceled|failed') == False]
+
+
+#Function to split the scent of the product2 and the count
+def count_product(phrase):
+    step0 = re.sub('\(product3\)|\(product4_product2\)','', phrase)
+    step1 = re.split("[,x]", step0)
+    step2 = [i.strip() for i in step1]
+    step3 = [(step2[i], step2[i-1]) for i in range(1, len(step2), 2)]
+    somme = 0
+    for i in step3:
+        a= pd.to_numeric(i[1])
+        somme +=a
+    return somme
+
+#Create dataframe per product
+def create_df(product):
+    new_online_orders[product] = new_online_orders[product].apply(count_product)
+    monthly_orders = new_online_orders[['date_only', product]]
+    monthly_orders = monthly_orders.groupby('date_only').sum().reset_index()
+    return monthly_orders
+
+df_product2  = create_df('product2')
+df_product4 = create_df('product4')
+df_product1 = create_df('product1')
+df_product3 = create_df('product3')
+df_mini_product4 = create_df('mini_product4')
+df_product5 = create_df('product5')
+df_product9 = create_df('product9')
+df_product6 = create_df('product6')
+df_product7 = create_df('product7')
+df_product8 = create_df('product8')
+df_product10 = create_df('product10')
+df_product11 = create_df('product11')
+df_single_product12 = create_df('single_product12')
+df_dual_product12s = create_df('dual_product12s')
+
+
+#Merge all dataframes
+dfs = [df_product2, df_product1, df_product3, df_product4, df_mini_product4, df_product5, df_product9, df_product6, df_product7, df_product8, df_product10, df_product11, df_single_product12, df_dual_product12s]
+df_merged_online_product = reduce(lambda  left,right: pd.merge(left,right,on=['date_only'], how='outer'), dfs)
+
+#add the month
+df_merged_online_product['month'] = df_merged_online_product.date_only.apply(lambda x:datetime.strptime(x, '%m/%d/%Y')).apply(lambda x:x.strftime('%Y-%m'))
+
+#Groupby month
+df_online_product_per_month = df_merged_online_product.groupby('month').sum()
+
+#Transpose the dataframe
+df_online_product_per_month = df_online_product_per_month.transpose()
+
+#Add the indication that the dataframe is calculated for online sales
+df_online_product_per_month['channel'] = 'Online'
+
+#export to csv
+df_online_product_per_month.to_csv(variables.merged_df_product_sold)
