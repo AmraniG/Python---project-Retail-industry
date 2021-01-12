@@ -1,0 +1,48 @@
+import pandas as pd
+from datetime import datetime
+from datetime import date
+import Variables as variables
+
+#Read csv and create dataframes
+new_online_orders = pd.read_csv(variables.new_online_orders_merged_FX)
+
+#Drop data from 2019 
+new_online_orders = new_online_orders[new_online_orders['year_only']>=2020]
+
+#LTV online = Total Revenue / Unique clients
+total_revenue = new_online_orders.total_in_sgd.sum()
+number_unique_client = len(new_online_orders.email.unique())
+LTV_global_online = total_revenue/number_unique_client
+print('LTV online to date :'+ str(LTV_global_online))
+
+#LTV online by end of each month (ex : 'by end of march' is the period from Jan 1st to March 31st, end of June is from Jan1st to end of June)
+def LTV_per_period(df, year):
+    list_month_LTV = []
+    for i in range(1,13):
+        df_period = df[(df['month_only'] <= i) & (df['year_only'] <= year)]
+        total_revenue_period = df_period.total_in_sgd.sum()
+        number_unique_client_period = len(df_period.email.unique())
+        LTV_global_period = total_revenue_period/number_unique_client_period
+        list_month_LTV.append(((str(i)+'/'+str(year)),LTV_global_period))
+    return list_month_LTV
+
+def LTV_evolution(df, year):
+    list_LTV_year = []
+    for i in range(2020,year+1):
+        list_LTV_year.append(LTV_per_period(df, i))
+    return list_LTV_year
+
+def LTV_df(df,year):
+    list_finale = []
+    list_LTV_year = LTV_evolution(df, year)
+    for i in list_LTV_year:
+        for j in i:
+            list_finale.append(j)
+    return list_finale
+
+#Create a dataframe with LTV per month 
+LTV_evolution_online_df = pd.DataFrame(LTV_df(new_online_orders, variables.YEAR))
+LTV_evolution_online_df.columns = ['Month', 'LTV from begining of the year until end of month']
+LTV_evolution_online_df['Month'] = LTV_evolution_online_df.Month.apply(lambda x:datetime.strptime(x, '%m/%Y'))
+
+LTV_evolution_online_df.to_csv(variables.LTV_online_evolution)
