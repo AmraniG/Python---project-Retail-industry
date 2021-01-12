@@ -1,0 +1,80 @@
+import pandas as pd
+import Variables as variables
+import re
+from pandas import DataFrame
+
+#Read csv and create dataframes
+online_orders = pd.read_csv(variables.new_online_orders_merged_FX)
+
+#Dropping all the rows without amount
+new_online_orders = online_orders.dropna(subset = ['product1'])
+
+#Selecting only orders of product1
+purchased_product1 = new_online_orders[((new_online_orders.product2 == '-') & (new_online_orders.product3 == '-') & (new_online_orders.product4 == '-') & (new_online_orders.product5 == '-') & (new_online_orders.product6 == '-') & (new_online_orders.mini_product5 == '-') & (new_online_orders.product7 == '-') & (new_online_orders.product8 == '-') & (new_online_orders.product9 == '-') )]
+
+#counting the number of client who purchased only product 1
+unique_client_product1 = len(pd.unique(only_product1.email))
+
+#identifying the amount of orders regarding product 1
+total_sgd_product1 = only_product1.total_in_sgd.sum()
+
+groupped_only_product1 = only_product1.groupby('email').id.count().reset_index()
+merged_df = pd.merge(groupped_only_product1 , online_orders,how = 'left', on = 'email')
+filtered_df = merged_df[(merged_df.product1.isna())]
+
+unique_client_other_products = len(pd.unique(filtered_df.email))
+
+#Calculating conversion rate
+conversion_rate = unique_client_other_products / unique_client_product1 *100
+print(unique_client_other_products)
+print(unique_client_product1)
+
+print('Conversion_rate :'+str(conversion_rate))
+print('total amount spent by these returning customers after purchasing only product 1 : '+str(filtered_df.total_in_sgd.sum()))
+
+#Export to csv
+filtered_df.to_csv(variables.filtered_df)
+
+#analysis of what products are bought by client who bought the first time the product 1 and are buying other products
+online_orders = pd.read_csv(variables.filtered_df)
+
+
+#Fill the product1 Df with - in case of no values 
+online_orders['product1'] = online_orders.product1.fillna(value = '-')
+
+#Drop the rows where order status is canceled or failed
+new_online_orders = online_orders[online_orders["status"].str.contains('canceled|failed') == False]
+
+
+#Function to split the scent of the product2 and the count
+def count_product(phrase):
+    step0 = re.sub('\(product3\)|\(product5_product2\)','', phrase)
+    step1 = re.split("[,x]", step0)
+    step2 = [i.strip() for i in step1]
+    step3 = [(step2[i], step2[i-1]) for i in range(1, len(step2), 2)]
+    somme = 0
+    for i in step3:
+        a= pd.to_numeric(i[1])
+        somme +=a
+    return somme
+
+
+def tupple_product(product):
+    new_online_orders['count_'+product] = new_online_orders[product].apply(count_product)
+    compteur = new_online_orders['count_'+product].sum()
+    return (product, compteur)
+
+
+#Creating tupples for other product boughts / number 
+df_product2  = tupple_product('product2')
+df_product5 = tupple_product('product5')
+df_product1 = tupple_product('product1')
+df_product3 = tupple_product('product3')
+df_mini_product5 = tupple_product('mini_product5')
+df_product7 = tupple_product('product7')
+
+big_liste = [df_product2, df_product5, df_product3, df_mini_product5, df_product7]
+product_df = DataFrame(big_liste, columns = ['product', 'count_number'])
+
+#Exporting to csv
+product_df.to_csv(variables.analysis_other_product_bought_by_product1_client)
