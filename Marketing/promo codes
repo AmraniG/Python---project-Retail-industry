@@ -1,0 +1,12 @@
+import pandas as pd
+import Variables as variables
+import re
+from pandas import DataFrame
+
+#Read csv and create dataframes
+online_orders = pd.read_csv(variables.new_online_orders_merged_FX)
+
+#Group the dataframe per promocode with the total revenue per promocode
+promo = online_orders.groupby('promo').total_in_sgd.sum().reset_index()
+
+promo.to_csv(variables.promo_codes_path)
