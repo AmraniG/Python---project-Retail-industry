@@ -1,0 +1,82 @@
+import pandas as pd
+from datetime import datetime
+from datetime import date
+import requests
+import json
+import Variables as variables
+import csv
+
+
+#Read csv and create dataframes
+online_orders = pd.read_csv(variables.online_orders_toanalyze)
+
+#Transform the date_created to a date format
+split_string = lambda x:x.split('.')[0]
+formatting = lambda x:datetime.strptime(x, "%Y-%m-%d %H:%M:%S")
+day = lambda x:datetime(x.year, x.month, x.day).date()
+to_string = lambda x:x.strftime('%Y-%m-%d')
+
+online_orders['date_and_time'] = online_orders.date_created.apply(split_string).apply(formatting)
+online_orders['date_only']= online_orders.date_and_time.apply(day)
+online_orders['date_string'] = online_orders.date_only.apply(to_string)
+
+#Transform the currency format
+online_orders['currency']= online_orders.currency.str.upper()
+
+#Replace the NaN Values in currency with 'SGD'
+online_orders['currency'] = online_orders['currency'].fillna('SGD')
+
+# Create new column to have all rates to SGD -- using free API version only 100 calls per hour
+def convert(currency, date_only, start_id):
+    while start_id >= variables.FROM_ID:
+        currency_format = currency+'_SGD'
+        if currency == 'SGD':
+                return 1
+        else:
+            url = 'https://free.currconv.com/api/v7/convert?apiKey={}={}&compact=ultra&date={}'.format(variables.API_KEY_FREE, currency_format, date_only)
+            response = requests.get(url)
+            to_parse =response.json()
+            rate = to_parse[currency_format][date_only]
+            rate_num = pd.to_numeric(rate)
+            return rate_num
+    
+
+#Create new column to have all rates to SGD -- Using the FIXER IO API (PAID)
+def convert_fixer(currency, date, start_id):
+    while start_id >= variables.FROM_ID:
+        if currency == 'SGD':
+                return 1
+        else:
+            url = 'https://data.fixer.io/api/{}?access_key={}&base=SGD&symbols={}'.format(date, variables.API_KEY_FIXER, currency)
+            response = requests.get(url)
+            to_parse =response.json()
+            rate = to_parse['rates'][currency]
+            rate_num = pd.to_numeric(rate)
+            return rate_num
+
+#using the free API
+online_orders['rate_base_sgd'] = online_orders.apply((lambda row:convert(row.currency, row.date_string, row.id)), axis=1)
+online_orders['rate_to_sgd'] = online_orders.rate_base_sgd.apply(lambda x:1/x)
+
+#using the fixer API
+#online_orders['rate_to_sgd'] = online_orders.apply((lambda row:convert_fixer(row.currency, row.date_string, row.id)), axis=1)
+
+#keep only the data of : date, currency and rate and export it to csv
+FX_rates = online_orders[['id','date_string', 'currency', 'rate_to_sgd']]
+FX_rates_period = FX_rates[(FX_rates['id'] >= variables.FROM_ID) & (FX_rates['currency'] !='SGD')]
+
+#Remove duplicates and Id
+FX_rates_interm = FX_rates_period.drop('id', axis = 1)
+FX_rates_final_period = FX_rates_interm.drop_duplicates()
+
+#Transform the date
+day = lambda x:datetime(x.year, x.month, x.day).date()
+to_string = lambda x:x.strftime('%m/%d/%Y')
+
+FX_rates_final_period['date_string'] = FX_rates_final_period.date_string.apply(lambda x:datetime.strptime(x, "%Y-%m-%d")).apply(day).apply(to_string)
+
+#update the FX rates Global with the new values
+FX_rates_final_period.to_csv(variables.FX_rate_file_global, mode='a', index=False, header=False)
+
+#Export to CSV
+FX_rates_final_period.to_csv(variables.path_FX_rates_period)
