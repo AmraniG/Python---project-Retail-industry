@@ -1,0 +1,43 @@
+import pandas as pd
+from datetime import datetime
+from datetime import date
+import Variables as variables
+
+#Read csv and create dataframes
+online_orders = pd.read_csv(variables.online_orders_toanalyze)
+FX_rates = pd.read_csv(variables.FX_rate_file_global)
+
+#Transform the date_created to a date format
+split_string = lambda x:x.split('.')[0]
+formatting = lambda x:datetime.strptime(x, "%Y-%m-%d %H:%M:%S")
+day = lambda x:datetime(x.year, x.month, x.day).date()
+to_string = lambda x:x.strftime('%m/%d/%Y')
+
+online_orders['date_and_time'] = online_orders.date_created.apply(split_string).apply(formatting)
+online_orders['date_only']= online_orders.date_and_time.apply(day)
+online_orders['month_only'] = pd.DatetimeIndex(online_orders['date_only']).month
+online_orders['year_only'] = pd.DatetimeIndex(online_orders['date_only']).year
+online_orders['date_string'] = online_orders.date_only.apply(to_string)
+FX_rates['date_string'] = FX_rates.date_string.apply(lambda x:datetime.strptime(x, "%m/%d/%Y")).apply(day).apply(to_string)
+
+#Transform the currency format to capital letters and replace the NaN values with 'SGD'
+online_orders['currency']= online_orders.currency.str.upper()
+online_orders['currency'] = online_orders['currency'].fillna('SGD')
+
+#Transform the email format to lowercase letters to avoid errors when counting unique clients
+online_orders['email']=online_orders.email.str.lower()
+
+#Drop the rows where order status is canceled or failed
+online_orders_interm = online_orders[online_orders["status"].str.contains('canceled|failed') == False]
+
+#Merge online_orders and FX_rates Dataframes
+new_online_orders = pd.merge(online_orders_interm, FX_rates, how='left', on = ['currency', 'date_string'])
+
+#Replace the NaN values by 1 (conversion rate = 1 as currency = SGD)
+new_online_orders['rate_to_sgd'] = new_online_orders.rate_to_sgd.fillna(1)
+
+#Calculate the total in SGD
+new_online_orders['total_in_sgd'] = new_online_orders.apply((lambda row:row.total/row.rate_to_sgd), axis=1)
+
+#Export the new dataframe to csv
+new_online_orders.to_csv(variables.new_online_orders_merged_FX)
