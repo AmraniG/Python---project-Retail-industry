@@ -1,0 +1,20 @@
+import pandas as pd
+from datetime import datetime
+from datetime import date
+import Variables as variables
+
+#Read csv and create dataframes
+new_online_orders = pd.read_csv(variables.new_online_orders_merged_FX)
+
+#Drop data from 2019 
+new_online_orders = new_online_orders[new_online_orders['year_only']>=2020]
+
+#Create a column with month and year
+new_online_orders['month_only'] = new_online_orders.month_only.apply(lambda x:str(x))
+new_online_orders['month_only'] = new_online_orders.month_only.apply(lambda x:'0'+str(x) if len(x)<2 else str(x))
+new_online_orders['month_year'] = new_online_orders.apply((lambda x:x.month_only+'/'+ str(x.year_only)), axis = 1)
+
+#Select only useful columns and group by month. Then calculate the monthly average basket
+new_online_orders = new_online_orders[['month_year', 'total_in_sgd']]
+new_online_orders = new_online_orders.groupby('month_year').total_in_sgd.mean().reset_index()
+new_online_orders.to_csv(variables.average_basket_online, index = False)
